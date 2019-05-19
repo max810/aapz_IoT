@@ -3,10 +3,14 @@
 import logging
 import logging.handlers
 import argparse
+import signal
+import subprocess
 import sys
 import os
 import time
 from bluetooth import *
+
+P: subprocess.Popen = None
 
 
 class LoggerHelper(object):
@@ -41,9 +45,11 @@ def setup_logging():
     # Set the log level
     logger.setLevel(LOG_LEVEL)
     # Make a rolling event log that resets at midnight and backs-up every 3 days
-    handler = logging.handlers.TimedRotatingFileHandler(LOG_FILE,
+    handler = logging.handlers.TimedRotatingFileHandler(
+        LOG_FILE,
         when="midnight",
-        backupCount=3)
+        backupCount=3
+    )
 
     # Log messages should include time stamp and log level
     formatter = logging.Formatter('%(asctime)s %(levelname)-8s %(message)s')
@@ -58,7 +64,21 @@ def setup_logging():
     sys.stderr = LoggerHelper(logger, logging.ERROR)
 
 
-# Main loop
+def stop_video_stream():
+    global P
+    if not P:
+        return
+    P.send_signal(signal.SIGINT)
+    P = None
+
+
+def start_video_stream():
+    global P
+    if P:
+        return
+    P = subprocess.Popen(["/home/max810/venv/main37/bin/python", "/home/max810/aapz_project/IoT.py"])  # /home/max810/aapz_project/
+
+
 def main():
     # Setup logging
     setup_logging()
@@ -84,27 +104,21 @@ def main():
 
     # Start advertising the service
     advertise_service(server_sock, "RaspiBtSrv",
-                       service_id=uuid,
-                       service_classes=[uuid, SERIAL_PORT_CLASS],
-                       profiles=[SERIAL_PORT_PROFILE])
+                      service_id=uuid,
+                      service_classes=[uuid, SERIAL_PORT_CLASS],
+                      profiles=[SERIAL_PORT_PROFILE])
 
     # These are the operations the service supports
     # Feel free to add more
-    operations = ["ping", "example"]
+    # operations = ["ping", "example"]
 
     # Main Bluetooth server loop
+    # This will block until we get a new connection
+    print("Waiting for connection on RFCOMM channel %d" % port)
+    client_sock, client_info = server_sock.accept()
+    print("Accepted connection from ", client_info)
     while True:
-
-        print("Waiting for connection on RFCOMM channel %d" % port)
-
         try:
-            client_sock = None
-
-            # This will block until we get a new connection
-            client_sock, client_info = server_sock.accept()
-            print("Accepted connection from ", client_info)
-
-            # Read the data sent by the client
             data = client_sock.recv(1024).decode('utf-8')
             if len(data) == 0:
                 break
@@ -112,15 +126,14 @@ def main():
             print("Received [%s]" % data)
 
             # Handle the request
-            if data == "getop":
-                response = "op:%s" % ",".join(operations)
-            elif data == "ping":
-                response = "msg:Pong"
-            elif data == "example":
-                response = "msg:This is an example"
-            # Insert more here
+            if data == "0":
+                stop_video_stream()
+                response = "msg:[-]Stopped stream"
+            elif data == "1":
+                start_video_stream()
+                response = "msg:[+]Started stream"
             else:
-                response = "msg:Not supported"
+                response = "msg:[.]Not supported"
 
             client_sock.send(response)
             print("Sent back [%s]" % response)
@@ -138,4 +151,6 @@ def main():
             print("Server going down")
             break
 
-main()
+
+if __name__ == '__main__':
+    main()
