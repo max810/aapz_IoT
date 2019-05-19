@@ -34,7 +34,7 @@ if __name__ == '__main__':
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     print("Recovering stream...")
     res = requests.post("http://{}:{}/api/Stream/start-stream".format(RECEIVER_IP, 5000), params={
-        'driverIdentifier': "1"
+        'driverIdentifier': "test_identifier"
     }, timeout=60000)
 
     print("type(res.status_code) = ", type(res.status_code))
